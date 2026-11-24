@@ -1,10 +1,17 @@
-from app.services.vector_store.chroma_manager import (
-    add_chunks_to_vector_store,
-    get_chroma_client,
-    get_collection_stats,
-    get_or_create_collection,
-    reset_collection,
-)
+try:
+    from app.services.vector_store.chroma_manager import (
+        add_chunks_to_vector_store,
+        get_chroma_client,
+        get_collection_stats,
+        get_or_create_collection,
+        reset_collection,
+    )
+except ImportError:
+    add_chunks_to_vector_store = None
+    get_chroma_client = None
+    get_collection_stats = None
+    get_or_create_collection = None
+    reset_collection = None
 from app.services.vector_store.qdrant_manager import (
     delete_session_chunks,
     get_qdrant_client,

@@ -1,8 +1,13 @@
 import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-import chromadb
-from chromadb.config import Settings
+
+try:
+    import chromadb
+    from chromadb.config import Settings
+except ImportError:
+    chromadb = None
+    Settings = None
 
 # Add workspace root to sys.path if running as main script
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -12,14 +17,19 @@ if str(ROOT_DIR) not in sys.path:
 from app.config import config
 
 # Global ChromaDB client singleton instance
-_chroma_client: Optional[chromadb.PersistentClient] = None
+_chroma_client: Optional[Any] = None
 
 
-def get_chroma_client() -> chromadb.PersistentClient:
+def get_chroma_client() -> Any:
     """Returns a singleton instance of the ChromaDB PersistentClient.
     Initializes disk storage at config.chroma_persist_dir.
     """
     global _chroma_client
+    if chromadb is None:
+        raise ImportError(
+            "chromadb is not installed in this environment. "
+            "For cloud deployment, Qdrant is the active vector store."
+        )
     if _chroma_client is None:
         persist_dir = Path(config.chroma_persist_dir)
         persist_dir.mkdir(parents=True, exist_ok=True)

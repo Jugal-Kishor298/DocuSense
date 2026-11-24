@@ -3,7 +3,10 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Generator
 
-import ollama
+try:
+    import ollama
+except ImportError:
+    ollama = None
 
 # Add workspace root to sys.path if running as main script
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -17,6 +20,9 @@ from prompts.templates import build_grounded_prompt
 
 def _stream_ollama(prompt: str, model_name: str) -> Generator[str, None, None]:
     """Yields tokens from a local Ollama model."""
+    if ollama is None:
+        yield f"\n[ollama package is not installed. To run local models, install ollama: pip install ollama]"
+        return
     try:
         response_stream = ollama.chat(
             model=model_name,
