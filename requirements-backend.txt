@@ -1,0 +1,29 @@
+# ==============================================================================
+# DocuSense Backend Dependencies (Render Free Tier — 512 MB RAM / 0.1 CPU)
+# Zero PyTorch / Torchvision. Zero Streamlit. C++ ONNX CPU Inference Only.
+# ==============================================================================
+
+# Web Framework & HTTP Server
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.8.0
+python-multipart>=0.0.9
+httpx>=0.27.0
+
+# Document Ingestion & Text Chunking
+pymupdf>=1.24.0
+langchain-text-splitters>=0.2.0
+
+# CPU ONNX Vector Embeddings & Cross-Encoder Reranker
+fastembed>=0.3.0
+flashrank>=0.2.0
+
+# Cloud Vector Storage & Multi-Tenancy
+qdrant-client>=1.10.0
+
+# Cloud LLM Inference Engine
+groq>=0.11.0
+
+# Environment & Diagnostic Utilities
+python-dotenv>=1.0.0
+psutil>=5.9.0

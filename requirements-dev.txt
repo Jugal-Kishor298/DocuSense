@@ -1,0 +1,21 @@
+# Vector Storage & Retrieval
+chromadb
+
+# PDF Extraction & Chunking
+pymupdf
+langchain-text-splitters
+
+# Embeddings & Language Models
+sentence-transformers
+fastembed
+torchvision
+ollama
+
+# LangChain Utilities & Integrations
+langchain
+langchain-community
+langchain-huggingface
+
+# Web UI & Environment
+streamlit
+python-dotenv

@@ -1,3 +1,6 @@
 from app.config.app_config import config, AppConfig
 
-__all__ = ["config", "AppConfig"]
+# Alias settings to config for multi-project compatibility
+settings = config
+
+__all__ = ["config", "settings", "AppConfig"]

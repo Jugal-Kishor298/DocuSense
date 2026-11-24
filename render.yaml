@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: docusense-api
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r requirements-backend.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: QDRANT_COLLECTION
+        value: docusense_docs
+      - key: VECTOR_DIMENSION
+        value: 384
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: RATE_LIMIT_DEMO_QUERIES
+        value: 8
+      - key: MAX_UPLOAD_SIZE_MB
+        value: 10
+      - key: CORS_ORIGINS
+        value: "*"

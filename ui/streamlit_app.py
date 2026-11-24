@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 from pathlib import Path
@@ -8,18 +9,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.config import config
-from app.services.ingestion import load_pdf
-from app.services.chunking import chunk_document
-from app.services.embeddings import generate_embeddings
-from app.services.vector_store import (
-    add_chunks_to_vector_store,
-    get_collection_stats,
-    reset_collection,
-)
-from app.services.retrieval import retrieve_relevant_chunks
-from app.services.generation import generate_answer_stream
-
+from ui.api_client import DocuSenseAPIClient
 
 # ==============================================================================
 # Page Configuration & Modern Dark UI Styling
@@ -56,27 +46,49 @@ st.markdown(
         margin-bottom: 1.5rem;
     }
 
+    /* Status Pill */
+    .status-pill-online {
+        display: inline-block;
+        background: rgba(34, 197, 94, 0.15);
+        color: #4ADE80;
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        border-radius: 9999px;
+        padding: 3px 10px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        margin-bottom: 0.8rem;
+    }
+    .status-pill-offline {
+        display: inline-block;
+        background: rgba(239, 68, 68, 0.15);
+        color: #F87171;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        border-radius: 9999px;
+        padding: 3px 10px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        margin-bottom: 0.8rem;
+    }
+
     /* Sidebar */
     section[data-testid="stSidebar"] {
         background-color: #0F172A;
         border-right: 1px solid #1E293B;
     }
 
-    /* ── Upload Dropzone: flatten card, remove inner box shadow ── */
+    /* Upload Dropzone */
     section[data-testid="stSidebar"] [data-testid="stFileUploader"] {
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
         padding: 0 !important;
     }
-    /* The dashed drop-area itself — keep a very subtle border, no fill */
     section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {
         background: rgba(255,255,255,0.03) !important;
         border: 1px dashed rgba(255,255,255,0.12) !important;
         border-radius: 8px !important;
         box-shadow: none !important;
     }
-    /* "Upload PDFs to Index" label + "200MB per file" helper — mute to 55% */
     section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] p,
     section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"] p,
     section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"] small,
@@ -84,69 +96,35 @@ st.markdown(
         color: rgba(203,213,225,0.55) !important;
         font-size: 0.82rem !important;
     }
-    /* Document icon block: solid white -> semi-transparent tint */
-    section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"] svg,
-    section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"] span[data-testid="stIconMaterial"] {
-        background: rgba(255,255,255,0.08) !important;
-        border-radius: 6px !important;
-        padding: 4px !important;
-        color: rgba(148,163,184,0.7) !important;
-    }
-    /* Uploaded file item rows: dark + semi-transparent, no stacked box */
-    section[data-testid="stSidebar"] [data-testid="stFileUploaderFile"] {
-        background: rgba(15,23,42,0.6) !important;
-        border: 1px solid rgba(255,255,255,0.06) !important;
-        border-radius: 6px !important;
-        padding: 6px 10px !important;
-    }
-    /* File name text inside rows */
-    section[data-testid="stSidebar"] [data-testid="stFileUploaderFileName"] {
-        color: rgba(226,232,240,0.85) !important;
-        font-size: 0.82rem !important;
-    }
-    /* X / clear button: invisible until hover */
-    section[data-testid="stSidebar"] [data-testid="stFileUploaderDeleteBtn"] button {
-        opacity: 0.25 !important;
-        transition: opacity 0.2s ease !important;
-    }
-    section[data-testid="stSidebar"] [data-testid="stFileUploaderDeleteBtn"] button:hover {
-        opacity: 0.9 !important;
-    }
-
-    /* Progress Bar */
-    .stProgress > div > div > div > div {
-        background-image: linear-gradient(to right, #3B82F6, #8B5CF6);
-    }
 
     /* Source Citation Cards */
     .source-card {
         background-color: #1E293B;
-        border-left: 4px solid #3B82F6;
-        padding: 12px 16px;
+        border: 1px solid #334155;
         border-radius: 8px;
+        padding: 12px 14px;
         margin-bottom: 10px;
-        font-size: 0.90rem;
+        font-size: 0.88rem;
         color: #E2E8F0;
-        line-height: 1.5;
     }
     .source-card-header {
-        font-weight: 600;
-        color: #60A5FA;
-        margin-bottom: 6px;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        margin-bottom: 6px;
+        font-weight: 600;
+        color: #93C5FD;
+        font-size: 0.82rem;
     }
     .source-badge {
-        background-color: #334155;
-        color: #93C5FD;
-        font-size: 0.78rem;
-        padding: 2px 8px;
+        background: rgba(96, 165, 250, 0.15);
+        color: #60A5FA;
         border-radius: 4px;
-        font-weight: 500;
+        padding: 2px 6px;
+        font-size: 0.75rem;
     }
 
-    /* Empty State */
+    /* Empty State Card */
     .empty-state-card {
         background-color: #1E293B;
         border: 1px dashed #334155;
@@ -173,57 +151,120 @@ st.markdown(
 
 
 # ==============================================================================
-# Session State Initialization
+# Client & Session State Initialization
 # ==============================================================================
+def resolve_backend_url() -> str:
+    """Resolves backend API URL from Streamlit secrets or environment variables."""
+    try:
+        if "BACKEND_URL" in st.secrets:
+            return st.secrets["BACKEND_URL"]
+    except Exception:
+        pass
+    return os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
+
+
+if "backend_url" not in st.session_state:
+    st.session_state.backend_url = resolve_backend_url()
+
+api_client = DocuSenseAPIClient(base_url=st.session_state.backend_url)
+
+
 def init_session_state():
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "indexed_files" not in st.session_state:
         st.session_state.indexed_files = []
-    if "top_k" not in st.session_state:
-        st.session_state.top_k = config.top_k
-    if "relevance_pct" not in st.session_state:
-        st.session_state.relevance_pct = int(round((1.0 - config.similarity_threshold) * 100))
     if "upload_processed" not in st.session_state:
         st.session_state.upload_processed = set()
     if "confirm_reset" not in st.session_state:
         st.session_state.confirm_reset = False
-    if "llm_provider" not in st.session_state:
-        st.session_state.llm_provider = "ollama"
-    if "ollama_model" not in st.session_state:
-        st.session_state.ollama_model = config.ollama_model
+    if "backend_online" not in st.session_state:
+        st.session_state.backend_online = False
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = None
+    if "remaining_queries" not in st.session_state:
+        st.session_state.remaining_queries = 8
+    if "max_queries" not in st.session_state:
+        st.session_state.max_queries = 8
+    if "top_k" not in st.session_state:
+        st.session_state.top_k = 5
+    if "enable_reranking" not in st.session_state:
+        st.session_state.enable_reranking = True
+    if "custom_groq_key" not in st.session_state:
+        st.session_state.custom_groq_key = ""
     if "groq_model" not in st.session_state:
-        st.session_state.groq_model = "meta-llama/llama-4-scout-17b-16e-instruct"
-    if "groq_api_key" not in st.session_state:
-        import os
-        st.session_state.groq_api_key = os.getenv("GROQ_API_KEY", "")
+        st.session_state.groq_model = "openai/gpt-oss-120b"
+    if "last_metadata" not in st.session_state:
+        st.session_state.last_metadata = None
 
 
 init_session_state()
 
 
 # ==============================================================================
+# Cold-Start Wakeup & Health Verification
+# ==============================================================================
+def ensure_backend_connected():
+    """Checks backend health; if sleeping (Render free tier), displays wake-up progress banner."""
+    if not st.session_state.backend_online:
+        is_healthy, _ = api_client.check_health(timeout=2.0)
+        if is_healthy:
+            st.session_state.backend_online = True
+        else:
+            # Render free-tier cold-start handler
+            with st.status("🚀 Connecting to DocuSense Backend (Render free tier waking from sleep ~45s)...", expanded=True) as status_box:
+                progress_bar = st.progress(0)
+                for status in api_client.poll_for_wakeup(max_seconds=70, interval=2.5):
+                    pct = min(100, int((status["elapsed"] / 50.0) * 100))
+                    progress_bar.progress(pct)
+                    status_box.write(f"⏳ Waiting for backend container... ({status['elapsed']}s elapsed)")
+                    if status.get("online"):
+                        status_box.update(label="✅ DocuSense Backend is online and ready!", state="complete", expanded=False)
+                        st.session_state.backend_online = True
+                        break
+                    if status.get("error"):
+                        status_box.update(label="❌ Backend wake-up timed out. Please refresh in a moment.", state="error")
+                        break
+
+    # Initialize backend session if not present
+    if st.session_state.backend_online and not st.session_state.session_id:
+        try:
+            sess_info = api_client.create_session()
+            st.session_state.session_id = sess_info["session_id"]
+            st.session_state.remaining_queries = sess_info.get("remaining_queries", 8)
+            st.session_state.max_queries = sess_info.get("max_queries", 8)
+        except Exception as e:
+            st.sidebar.error(f"Failed to create session: {e}")
+
+
+ensure_backend_connected()
+
+
+# ==============================================================================
 # Helper Functions
 # ==============================================================================
-def render_inspection_pane(sources, latency: float):
-    """Renders the 3-tab source citation and inspection pane."""
+def render_inspection_pane(sources, timings=None, latency=None):
+    """Renders the 3-tab source citation, relevance metadata, and latency breakdown pane."""
     if not sources:
         return
 
+    total_time = latency if latency is not None else (timings.get("total_ms", 0) / 1000.0 if timings else 0.0)
+
     with st.expander("📚 Source Citations & Inspection", expanded=False):
-        tab1, tab2, tab3 = st.tabs(["Retrieved Context", "Relevance & Metadata", "Latency"])
+        tab1, tab2, tab3 = st.tabs(["Retrieved Context", "Relevance & Metadata", "Latency Breakdown"])
 
         with tab1:
             for idx, src in enumerate(sources, 1):
-                sim_pct = f"{src.get('similarity_score', 0.0) * 100:.1f}%"
+                sim_score = src.get("similarity_score", 0.0)
+                sim_pct = f"{sim_score * 100:.1f}%" if sim_score <= 1.0 else f"{sim_score:.2f}"
                 st.markdown(
                     f"""
                     <div class="source-card">
                         <div class="source-card-header">
-                            <span>[Source {idx}] {src['filename']} — Page {src['page_number']}</span>
+                            <span>[Source {idx}] {src.get('filename', 'unknown')} — Page {src.get('page_number', 1)}</span>
                             <span class="source-badge">{sim_pct} Match</span>
                         </div>
-                        <div>{src['text']}</div>
+                        <div>{src.get('text', '')}</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -233,68 +274,24 @@ def render_inspection_pane(sources, latency: float):
             metadata_table = [
                 {
                     "Source": f"Source {idx}",
-                    "Document": src["filename"],
-                    "Page": f"Page {src['page_number']}",
-                    "Relevance Match": f"{src.get('similarity_score', 0.0) * 100:.1f}%",
+                    "Document": src.get("filename", "unknown"),
+                    "Page": f"Page {src.get('page_number', 1)}",
+                    "Similarity": f"{src.get('similarity_score', 0.0) * 100:.1f}%",
+                    "Distance": src.get("distance", 0.0),
                 }
                 for idx, src in enumerate(sources, 1)
             ]
             st.dataframe(metadata_table, use_container_width=True, hide_index=True)
 
-            with st.expander("🛠️ Raw Chunk IDs & Cosine Metrics"):
-                for idx, src in enumerate(sources, 1):
-                    st.json(
-                        {
-                            "source_index": idx,
-                            "chunk_id": src["chunk_id"],
-                            "cosine_distance": src.get("distance", 0.0),
-                            "similarity_score": src.get("similarity_score", 0.0),
-                        }
-                    )
-
         with tab3:
-            st.metric(label="Total Latency", value=f"{latency:.2f}s")
-
-
-def process_uploaded_pdf(uploaded_file, progress_bar, status_text):
-    """Runs the full ingestion -> chunking -> embedding -> vector store pipeline."""
-    temp_dir = ROOT_DIR / "data" / "raw"
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    temp_path = temp_dir / uploaded_file.name
-
-    try:
-        with open(temp_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-    except (PermissionError, OSError):
-        if not temp_path.exists():
-            alt_path = temp_dir / f"upload_{uploaded_file.name}"
-            with open(alt_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            temp_path = alt_path
-
-    status_text.markdown("🔄 **Step 1/4**: Ingesting PDF & extracting pages (300 DPI OCR)...")
-    progress_bar.progress(25)
-    pages = load_pdf(str(temp_path), dpi=300)
-
-    status_text.markdown("✂️ **Step 2/4**: Section-aware text chunking...")
-    progress_bar.progress(50)
-    chunks = chunk_document(pages)
-
-    status_text.markdown("🧬 **Step 3/4**: Generating FastEmbed 384D vector embeddings...")
-    progress_bar.progress(75)
-    chunk_texts = [c["text"] for c in chunks]
-    embeddings = generate_embeddings(chunk_texts)
-
-    status_text.markdown("🗄️ **Step 4/4**: Upserting vectors to ChromaDB...")
-    progress_bar.progress(95)
-    add_chunks_to_vector_store(chunks, embeddings)
-
-    progress_bar.progress(100)
-    status_text.markdown(f"✅ **Indexed {len(chunks)} chunks** from `{uploaded_file.name}`.")
-    time.sleep(0.5)
-
-    st.session_state.indexed_files.append(uploaded_file.name)
-    st.session_state.upload_processed.add(uploaded_file.name)
+            if timings:
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("Retrieval (Qdrant)", f"{timings.get('retrieval_ms', 0):.1f} ms")
+                col2.metric("Rerank (FlashRank)", f"{timings.get('rerank_ms', 0):.1f} ms")
+                col3.metric("LLM Inference (Groq)", f"{timings.get('generation_ms', 0):.1f} ms")
+                col4.metric("Total Latency", f"{timings.get('total_ms', 0):.1f} ms")
+            else:
+                st.metric(label="Total Latency", value=f"{total_time:.2f}s")
 
 
 # ==============================================================================
@@ -302,6 +299,13 @@ def process_uploaded_pdf(uploaded_file, progress_bar, status_text):
 # ==============================================================================
 with st.sidebar:
     st.markdown("### 📄 DocuSense AI")
+
+    # Backend Connection Status Badge
+    if st.session_state.backend_online:
+        st.markdown('<div class="status-pill-online">● Backend Online (Qdrant Cloud)</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="status-pill-offline">● Backend Offline / Connecting</div>', unsafe_allow_html=True)
+
     st.markdown("---")
 
     # 1. Document Upload
@@ -310,94 +314,91 @@ with st.sidebar:
         "Upload PDFs to Index",
         type=["pdf"],
         accept_multiple_files=True,
-        help="Upload digital or scanned PDFs. 300 DPI OCR fallback runs automatically for scanned pages.",
+        help="Upload digital PDFs (up to 10 MB per file). Text is extracted, embedded, and indexed into Qdrant Cloud.",
     )
 
-    if uploaded_files:
+    if uploaded_files and st.session_state.session_id:
         for u_file in uploaded_files:
             if u_file.name not in st.session_state.upload_processed:
-                st.info(f"Processing: **{u_file.name}**")
-                prog_bar = st.progress(0)
-                stat_txt = st.empty()
-                process_uploaded_pdf(u_file, prog_bar, stat_txt)
-                prog_bar.empty()
-                stat_txt.empty()
-                st.rerun()
+                st.info(f"Uploading & Indexing: **{u_file.name}**...")
+                try:
+                    with st.spinner("Processing PDF on backend (Chunking + FastEmbed 384D ONNX)..."):
+                        result = api_client.upload_document(
+                            session_id=st.session_state.session_id,
+                            filename=u_file.name,
+                            file_bytes=u_file.getvalue(),
+                        )
+                    st.success(f"✅ Indexed {result.get('indexed_chunks', 0)} chunks!")
+                    st.session_state.indexed_files.append(u_file.name)
+                    st.session_state.upload_processed.add(u_file.name)
+                    time.sleep(0.4)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Upload failed: {e}")
 
-    stats = get_collection_stats()
-    n_chunks = stats["total_vector_count"]
-    n_files  = len(st.session_state.indexed_files)
+    # Display session file summary
+    n_files = len(st.session_state.indexed_files)
     if n_files == 0:
-        st.caption("No documents indexed yet.")
+        st.caption("No documents indexed in this session yet.")
     else:
-        st.caption(f"{n_chunks:,} chunks · {n_files} {'file' if n_files == 1 else 'files'}")
+        st.caption(f"📁 {n_files} {'document' if n_files == 1 else 'documents'} indexed in session.")
 
     st.markdown("---")
 
-    # 2. Model Selector
+    # 2. Quota & Rate Limit Tracker
+    st.markdown("#### 🎯 Session Demo Quota")
+    quota_left = st.session_state.remaining_queries
+    quota_max = st.session_state.max_queries
+    quota_pct = max(0.0, min(1.0, quota_left / float(quota_max))) if quota_max > 0 else 0.0
+
+    st.progress(quota_pct)
+    st.caption(f"**{quota_left} / {quota_max}** free queries remaining.")
+
+    if quota_left <= 0:
+        st.warning("⚠️ Demo quota exhausted. Enter your own Groq API Key below to continue querying.")
+
+    st.markdown("---")
+
+    # 3. Model & API Key Configuration
     st.markdown("#### 🤖 Language Model")
-    provider_choice = st.radio(
-        "Backend",
-        options=["🦙 Local Ollama", "⚡ Groq API"],
-        index=0 if st.session_state.llm_provider == "ollama" else 1,
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-    st.session_state.llm_provider = "ollama" if "Ollama" in provider_choice else "groq"
+    st.session_state.groq_model = st.text_input(
+        "Groq Model ID",
+        value=st.session_state.groq_model,
+        placeholder="e.g. openai/gpt-oss-120b",
+        help="Target Groq model ID (default: openai/gpt-oss-120b).",
+    ).strip() or "openai/gpt-oss-120b"
 
-    if st.session_state.llm_provider == "ollama":
-        st.session_state.ollama_model = st.text_input(
-            "Ollama Model Name",
-            value=st.session_state.ollama_model,
-            placeholder="e.g. llama3.2:3b",
-            help="Exact model tag as shown by `ollama list`. Make sure it's pulled locally.",
-        ).strip()
-        active_model = st.session_state.ollama_model or config.ollama_model
-    else:
-        st.session_state.groq_api_key = st.text_input(
-            "Groq API Key",
-            value=st.session_state.groq_api_key,
-            type="password",
-            placeholder="gsk_...",
-            help="Your Groq Cloud API key. Get one at console.groq.com.",
-        ).strip()
-        st.session_state.groq_model = st.text_input(
-            "Groq Model Name",
-            value=st.session_state.groq_model,
-            placeholder="e.g. meta-llama/llama-4-scout-17b-16e-instruct",
-            help="Exact model ID from console.groq.com/docs/models (e.g. qwen-qwq-32b, meta-llama/llama-4-maverick-17b-128e-instruct).",
-        ).strip()
-        active_model = st.session_state.groq_model or "meta-llama/llama-4-scout-17b-16e-instruct"
+    st.session_state.custom_groq_key = st.text_input(
+        "Groq API Key (Optional)",
+        value=st.session_state.custom_groq_key,
+        type="password",
+        placeholder="gsk_...",
+        help="Optional: Enter your own Groq key from console.groq.com to bypass the demo query quota.",
+    ).strip()
 
     st.markdown("---")
 
-    # 3. RAG Hyperparameters
+    # 4. RAG Hyperparameters
     with st.expander("⚙️ RAG Hyperparameters", expanded=False):
         st.session_state.top_k = st.slider(
-            "Top-K Retrieved Chunks",
+            "Top-K Chunks",
             min_value=1,
             max_value=10,
             value=st.session_state.top_k,
-            help="Number of top relevant text chunks to retrieve from ChromaDB.",
+            help="Number of top reranked chunks supplied to LLM context.",
         )
-
-        st.session_state.relevance_pct = st.slider(
-            "Minimum Relevance Match %",
-            min_value=0,
-            max_value=100,
-            value=st.session_state.relevance_pct,
-            step=5,
-            help="Minimum similarity % required for a chunk to be included in context.",
+        st.session_state.enable_reranking = st.checkbox(
+            "Enable FlashRank Cross-Encoder",
+            value=st.session_state.enable_reranking,
+            help="Re-scores candidates using FlashRank TinyBERT joint attention.",
         )
-
-        computed_threshold = round(1.0 - (st.session_state.relevance_pct / 100.0), 2)
-        st.caption(f"🎯 *Cosine distance threshold*: `d <= {computed_threshold}`")
-        st.markdown("**Embedding**: `FastEmbed` (384D ONNX)")
+        st.markdown("**Vector Store**: `Qdrant Cloud`")
+        st.markdown("**Embedding**: `FastEmbed (384D ONNX)`")
 
     st.markdown("---")
 
-    # 4. System Actions
-    st.markdown("#### 🧹 Actions")
+    # 5. Session Actions
+    st.markdown("#### 🧹 Session Actions")
     col_btn1, col_btn2 = st.columns(2)
 
     with col_btn1:
@@ -410,16 +411,22 @@ with st.sidebar:
             st.session_state.confirm_reset = True
 
     if st.session_state.confirm_reset:
-        st.warning("⚠️ Delete all vectors & reset workspace?")
+        st.warning("⚠️ Purge session vectors from Qdrant?")
         col_c1, col_c2 = st.columns(2)
         with col_c1:
-            if st.button("Confirm Wipe", type="primary", use_container_width=True):
-                reset_collection()
+            if st.button("Confirm", type="primary", use_container_width=True):
+                if st.session_state.session_id:
+                    try:
+                        api_client.delete_session(st.session_state.session_id)
+                    except Exception:
+                        pass
                 st.session_state.messages = []
                 st.session_state.indexed_files = []
                 st.session_state.upload_processed = set()
+                st.session_state.session_id = None
                 st.session_state.confirm_reset = False
-                st.success("Database reset!")
+                ensure_backend_connected()
+                st.success("Session reset!")
                 time.sleep(0.5)
                 st.rerun()
         with col_c2:
@@ -428,8 +435,7 @@ with st.sidebar:
                 st.rerun()
 
     st.markdown("---")
-    provider_label = "Ollama (local)" if st.session_state.llm_provider == "ollama" else "Groq API"
-    st.caption(f"DocuSense v1.0 · {provider_label} · {active_model}")
+    st.caption(f"DocuSense v2.0 · Decoupled RAG · {st.session_state.groq_model}")
 
 
 # ==============================================================================
@@ -437,7 +443,7 @@ with st.sidebar:
 # ==============================================================================
 st.markdown('<div class="docusense-title">DocuSense</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="docusense-subtitle">Ask anything about your uploaded documents</div>',
+    '<div class="docusense-subtitle">Ask anything about your uploaded documents (Grounded RAG with Citations)</div>',
     unsafe_allow_html=True,
 )
 
@@ -447,64 +453,89 @@ if not st.session_state.messages:
         """
         <div class="empty-state-card">
             <div class="empty-state-title">Get started 📄</div>
-            <div class="empty-state-desc">Upload one or more PDFs from the sidebar, then ask any question.</div>
+            <div class="empty-state-desc">Upload one or more PDFs from the sidebar, then ask any question about their content.</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-# Chat history
+# Render Chat History
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
         if message["role"] == "assistant" and message.get("sources"):
-            render_inspection_pane(message["sources"], message.get("latency", 0.0))
+            render_inspection_pane(
+                sources=message["sources"],
+                timings=message.get("timings"),
+                latency=message.get("latency"),
+            )
 
-# Chat input
+# Chat Input & Streaming Execution
 prompt_input = st.chat_input("Ask anything about your documents...")
 
 if prompt_input:
+    if not st.session_state.backend_online:
+        st.error("Backend is currently offline. Please wait for connection or refresh.")
+        st.stop()
+
+    if not st.session_state.session_id:
+        ensure_backend_connected()
+
+    # Append and render user message
     st.session_state.messages.append({"role": "user", "content": prompt_input})
     with st.chat_message("user"):
         st.markdown(prompt_input)
 
-    active_distance_threshold = round(1.0 - (st.session_state.relevance_pct / 100.0), 2)
-
+    # Render streaming assistant response
     with st.chat_message("assistant"):
-        start_time = time.time()
-
-        # Retrieval — fast vector search, wrapped in a spinner
-        with st.spinner("Thinking..."):
-            retrieved_chunks = retrieve_relevant_chunks(
-                query=prompt_input,
-                top_k=st.session_state.top_k,
-                threshold=active_distance_threshold,
-            )
-
-        # Stream LLM response — spinner disappears on first token
         response_placeholder = st.empty()
-        full_response = response_placeholder.write_stream(
-            generate_answer_stream(
-                query=prompt_input,
-                retrieved_chunks=retrieved_chunks,
-                model_name=active_model,
-                provider=st.session_state.llm_provider,
-                groq_api_key=st.session_state.get("groq_api_key", "") or None,
-            )
-        )
-        end_time = time.time()
-        total_latency = end_time - start_time
+        collected_tokens = []
+        captured_metadata = {}
 
-        # Persist to session
+        def token_stream_generator():
+            start_stream_time = time.time()
+            for event in api_client.stream_query(
+                query=prompt_input,
+                session_id=st.session_state.session_id,
+                top_k=st.session_state.top_k,
+                enable_reranking=st.session_state.enable_reranking,
+                custom_groq_key=st.session_state.custom_groq_key or None,
+                model=st.session_state.groq_model,
+            ):
+                event_type = event.get("type")
+                if event_type == "token":
+                    content = event.get("content", "")
+                    collected_tokens.append(content)
+                    yield content
+                elif event_type == "done":
+                    captured_metadata.update(event)
+                    if "remaining_queries" in event and event["remaining_queries"] is not None:
+                        st.session_state.remaining_queries = event["remaining_queries"]
+                elif event_type == "error":
+                    err_msg = f"\n\n⚠️ **Error**: {event.get('content', 'Query failed')}"
+                    collected_tokens.append(err_msg)
+                    yield err_msg
+
+        with st.spinner("Retrieving from Qdrant Cloud & reranking..."):
+            full_response = response_placeholder.write_stream(token_stream_generator())
+
+        sources = captured_metadata.get("citations", [])
+        timings = captured_metadata.get("timings", {})
+
+        # Persist response to session state
         st.session_state.messages.append(
             {
                 "role": "assistant",
                 "content": full_response,
-                "sources": retrieved_chunks,
-                "latency": total_latency,
+                "sources": sources,
+                "timings": timings,
             }
         )
 
-        # Citations below answer
-        if retrieved_chunks:
-            render_inspection_pane(retrieved_chunks, total_latency)
+        # Render citations pane directly below assistant answer
+        if sources:
+            render_inspection_pane(sources, timings=timings)
+
+        # Update remaining query count in sidebar
+        if "remaining_queries" in captured_metadata and captured_metadata["remaining_queries"] is not None:
+            st.session_state.remaining_queries = captured_metadata["remaining_queries"]
