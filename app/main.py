@@ -31,17 +31,24 @@ from app.services.vector_store import init_qdrant_collection
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initializes vector store collections and singleton warmup on container boot."""
+    """Initializes vector store collections on container boot.
+
+    Embedding is now handled by Cloudflare Workers AI (cloud GPU inference),
+    so there is no local ONNX model to pre-warm — Render boots in seconds.
+    """
     print("=" * 60)
     print("Starting DocuSense Decoupled Backend Service...")
-    print(f"  • Qdrant Cluster : {config.qdrant_url or 'In-Memory Fallback'}")
-    print(f"  • Default LLM    : Groq ({config.groq_model})")
-    print(f"  • Max Upload     : {config.max_upload_size_mb} MB")
-    print(f"  • Demo Quota     : {config.rate_limit_demo_queries} queries/session")
+    print(f"  • Qdrant Cluster  : {config.qdrant_url or 'In-Memory Fallback'}")
+    print(f"  • Embedding       : Cloudflare Workers AI (@cf/baai/bge-small-en-v1.5, 384D)")
+    print(f"  • CF Account      : {config.cf_account_id[:8]}..." if config.cf_account_id else "  • CF Account      : ⚠️  CF_ACCOUNT_ID not set")
+    print(f"  • Default LLM     : Groq ({config.groq_model})")
+    print(f"  • Max Upload      : {config.max_upload_size_mb} MB")
+    print(f"  • Demo Quota      : {config.rate_limit_demo_queries} queries/session")
 
-    # Ensure collection exists in Qdrant on boot
+    # Ensure Qdrant collection exists on boot
     try:
         init_qdrant_collection()
+        print("  • Qdrant          : Collection ready ✓")
     except Exception as e:
         print(f"  [Warning] Qdrant collection check encountered error: {e}")
 

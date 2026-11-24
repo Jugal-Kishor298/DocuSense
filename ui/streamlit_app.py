@@ -322,7 +322,7 @@ with st.sidebar:
             if u_file.name not in st.session_state.upload_processed:
                 st.info(f"Uploading & Indexing: **{u_file.name}**...")
                 try:
-                    with st.spinner("Processing PDF on backend (Chunking + FastEmbed 384D ONNX)..."):
+                    with st.spinner("Processing PDF on backend (Chunking + Cloudflare Workers AI 384D)..."):
                         result = api_client.upload_document(
                             session_id=st.session_state.session_id,
                             filename=u_file.name,
@@ -393,7 +393,7 @@ with st.sidebar:
             help="Re-scores candidates using FlashRank TinyBERT joint attention.",
         )
         st.markdown("**Vector Store**: `Qdrant Cloud`")
-        st.markdown("**Embedding**: `FastEmbed (384D ONNX)`")
+        st.markdown("**Embedding**: `Cloudflare Workers AI (384D)`")
 
     st.markdown("---")
 

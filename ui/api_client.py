@@ -88,7 +88,7 @@ class DocuSenseAPIClient:
         files = {"file": (filename, file_bytes, "application/pdf")}
         data = {"session_id": session_id}
 
-        # Generous timeout for remote PDF parsing and embedding generation
+        # Timeout for PDF parsing, Cloudflare Workers AI batched embedding, and Qdrant upsert
         with httpx.Client(timeout=120.0) as client:
             resp = client.post(
                 f"{self.base_url}/api/v1/upload",

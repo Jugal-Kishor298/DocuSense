@@ -29,6 +29,10 @@ class AppConfig:
     qdrant_collection: str = os.getenv("QDRANT_COLLECTION", "docusense_docs")
     vector_dimension: int = int(os.getenv("VECTOR_DIMENSION", "384"))
 
+    # Cloudflare Workers AI (Cloud Embedding — zero local RAM, GPU inference)
+    cf_account_id: str = os.getenv("CF_ACCOUNT_ID", "")
+    cf_api_token: str = os.getenv("CF_API_TOKEN", "")
+
     # LLM Cloud Configurations (Groq)
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
     groq_model: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")

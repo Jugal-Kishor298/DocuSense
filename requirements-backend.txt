@@ -1,6 +1,7 @@
 # ==============================================================================
 # DocuSense Backend Dependencies (Render Free Tier — 512 MB RAM / 0.1 CPU)
-# Zero PyTorch / Torchvision. Zero Streamlit. C++ ONNX CPU Inference Only.
+# Zero PyTorch / Torchvision. Zero Streamlit. Zero local ONNX embedding models.
+# Embeddings offloaded to Cloudflare Workers AI (GPU, 384D, free 10K neurons/day).
 # ==============================================================================
 
 # Web Framework & HTTP Server
@@ -14,8 +15,7 @@ httpx>=0.27.0
 pymupdf>=1.24.0
 langchain-text-splitters>=0.2.0
 
-# CPU ONNX Vector Embeddings & Cross-Encoder Reranker
-fastembed>=0.3.0
+# Cross-Encoder Reranker (ONNX, lightweight ~40MB — kept for retrieval quality)
 flashrank>=0.2.0
 
 # Cloud Vector Storage & Multi-Tenancy

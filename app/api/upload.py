@@ -85,7 +85,7 @@ async def upload_and_index_document(
         del pages
         gc.collect()
 
-        # 3. Dense vector embeddings (FastEmbed 384D ONNX)
+        # 3. Dense vector embeddings (Cloudflare Workers AI 384D GPU)
         chunk_texts = [c["text"] for c in chunks]
         embeddings = generate_embeddings(chunk_texts)
 
