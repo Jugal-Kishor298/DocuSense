@@ -56,14 +56,26 @@ class DocuSenseAPIClient:
         """Provisions a new isolated session UUID on backend."""
         with httpx.Client(timeout=10.0) as client:
             resp = client.post(f"{self.base_url}/api/v1/sessions")
-            resp.raise_for_status()
+            if resp.status_code != 201:
+                detail = resp.text
+                try:
+                    detail = resp.json().get("detail", detail)
+                except Exception:
+                    pass
+                raise RuntimeError(f"Session creation failed: {detail}")
             return resp.json()
 
     def get_session_stats(self, session_id: str) -> Dict[str, Any]:
         """Retrieves vector counts and remaining query quota for this session."""
         with httpx.Client(timeout=10.0) as client:
             resp = client.get(f"{self.base_url}/api/v1/sessions/{session_id}/stats")
-            resp.raise_for_status()
+            if resp.status_code != 200:
+                detail = resp.text
+                try:
+                    detail = resp.json().get("detail", detail)
+                except Exception:
+                    pass
+                raise RuntimeError(f"Failed to fetch session stats: {detail}")
             return resp.json()
 
     def upload_document(
@@ -83,7 +95,13 @@ class DocuSenseAPIClient:
                 files=files,
                 data=data,
             )
-            resp.raise_for_status()
+            if resp.status_code != 201:
+                detail = resp.text
+                try:
+                    detail = resp.json().get("detail", detail)
+                except Exception:
+                    pass
+                raise RuntimeError(detail)
             return resp.json()
 
     def stream_query(

@@ -222,19 +222,23 @@ def _extract_text_and_tables_from_page(page: pymupdf.Page, dpi: int = 300) -> Tu
         if not is_in_table:
             text_blocks.append(b[4].strip())
 
-    text = "\n\n".join(text_blocks)
+    text = "\n\n".join(text_blocks).strip()
 
-    if (len(text.strip()) < 30 and not table_markdowns) or (not text and not table_markdowns):
-        # OCR Fallback for image-heavy slides / scanned pages
+    # Fallback to direct raw page text extraction if block filtering yielded nothing
+    if not text:
+        raw_direct = page.get_text("text").strip()
+        if raw_direct:
+            text = raw_direct
+
+    if (len(text) < 30 and not table_markdowns) or (not text and not table_markdowns):
+        # Optional OCR Fallback if system OCR packages are present
         ocr_text = ""
-        # 1. Try PyMuPDF native OCR engine first
         try:
             textpage_ocr = page.get_textpage_ocr(full=True, dpi=dpi)
             ocr_text = textpage_ocr.extractText().strip()
         except Exception:
             ocr_text = ""
 
-        # 2. Try RapidOCR fallback if PyMuPDF native OCR returned no text
         if not ocr_text:
             try:
                 from rapidocr_onnxruntime import RapidOCR
@@ -338,6 +342,21 @@ def load_pdf(filepath: str, dpi: int = 300) -> List[Dict[str, Any]]:
                     "filename": filename,
                     "doc_id": doc_id,
                 })
+
+        # Second-pass fallback: if advanced layout extraction yielded no text, extract raw text
+        if not pages_data:
+            for page_num in range(len(doc)):
+                page = doc.load_page(page_num)
+                raw_text = page.get_text("text").strip()
+                if raw_text:
+                    pages_data.append({
+                        "text": raw_text,
+                        "tables": [],
+                        "section_title": "",
+                        "page_number": page_num + 1,
+                        "filename": filename,
+                        "doc_id": doc_id,
+                    })
     finally:
         doc.close()
 
