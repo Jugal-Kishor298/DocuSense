@@ -108,7 +108,7 @@ class DocuSenseAPIClient:
         self,
         query: str,
         session_id: str,
-        top_k: int = 5,
+        top_k: int = 7,
         enable_reranking: bool = True,
         custom_groq_key: Optional[str] = None,
         model: Optional[str] = None,

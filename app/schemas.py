@@ -81,7 +81,7 @@ class TimingsBreakdown(BaseModel):
 class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1, description="Natural language user question.")
     session_id: Optional[str] = Field(None, description="Client session UUID for isolated retrieval.")
-    top_k: int = Field(5, ge=1, le=15, description="Final number of top reranked chunks.")
+    top_k: int = Field(7, ge=1, le=15, description="Final number of top reranked chunks.")
     enable_reranking: bool = Field(True, description="Whether to apply FlashRank cross-encoder reranking.")
     model: Optional[str] = Field(None, description="Optional override for Groq LLM model ID.")
 

@@ -187,7 +187,7 @@ def init_session_state():
     if "max_queries" not in st.session_state:
         st.session_state.max_queries = 8
     if "top_k" not in st.session_state:
-        st.session_state.top_k = 5
+        st.session_state.top_k = 7
     if "enable_reranking" not in st.session_state:
         st.session_state.enable_reranking = True
     if "custom_groq_key" not in st.session_state:
@@ -226,15 +226,28 @@ def ensure_backend_connected():
                         status_box.update(label="❌ Backend wake-up timed out. Please refresh in a moment.", state="error")
                         break
 
-    # Initialize backend session if not present
+    # Recover existing session from URL query param (?sid=...) on browser refresh,
+    # or provision a new isolated session if none exists.
     if st.session_state.backend_online and not st.session_state.session_id:
-        try:
-            sess_info = api_client.create_session()
-            st.session_state.session_id = sess_info["session_id"]
-            st.session_state.remaining_queries = sess_info.get("remaining_queries", 8)
-            st.session_state.max_queries = sess_info.get("max_queries", 8)
-        except Exception as e:
-            st.sidebar.error(f"Failed to create session: {e}")
+        existing_sid = st.query_params.get("sid")
+        if existing_sid:
+            try:
+                stats = api_client.get_session_stats(existing_sid)
+                st.session_state.session_id = existing_sid
+                st.session_state.remaining_queries = stats.get("remaining_queries", 8)
+                st.session_state.max_queries = stats.get("max_queries", 8)
+            except Exception:
+                existing_sid = None
+
+        if not st.session_state.session_id:
+            try:
+                sess_info = api_client.create_session()
+                st.session_state.session_id = sess_info["session_id"]
+                st.session_state.remaining_queries = sess_info.get("remaining_queries", 8)
+                st.session_state.max_queries = sess_info.get("max_queries", 8)
+                st.query_params["sid"] = st.session_state.session_id
+            except Exception as e:
+                st.sidebar.error(f"Failed to create session: {e}")
 
 
 ensure_backend_connected()
@@ -424,6 +437,7 @@ with st.sidebar:
                 st.session_state.indexed_files = []
                 st.session_state.upload_processed = set()
                 st.session_state.session_id = None
+                st.query_params.pop("sid", None)
                 st.session_state.confirm_reset = False
                 ensure_backend_connected()
                 st.success("Session reset!")
