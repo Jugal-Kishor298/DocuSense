@@ -171,10 +171,15 @@ def _build_markdown_table_from_rows(table_rows: List[Dict[str, Any]]) -> Tuple[s
     return table_md, rect
 
 
-def _extract_text_and_tables_from_page(page: pymupdf.Page, dpi: int = 300) -> Tuple[str, List[str]]:
-    """Extracts normal text and Markdown tables from a single PDF page.
+def _extract_text_and_tables_from_page(
+    page: pymupdf.Page,
+    dpi: int = 300,
+    extract_tables: bool = True,
+) -> Tuple[str, List[str]]:
+    """Extracts normal text and (optionally) Markdown tables from a single PDF page.
     Table bounding box (bbox) regions are excluded from normal text extraction to avoid content duplication.
-    Applies vector find_tables() first and layout span alignment fallback for borderless tables.
+    When `extract_tables=False` (recommended for 0.1 vCPU cloud tiers), skips heavy geometric table
+    detection and extracts all text blocks directly (~18x faster on CPU).
 
     Returns:
         Tuple[str, List[str]]: (normal_text, list_of_markdown_tables)
@@ -182,22 +187,23 @@ def _extract_text_and_tables_from_page(page: pymupdf.Page, dpi: int = 300) -> Tu
     table_markdowns = []
     table_rects = []
 
-    try:
-        tabs = page.find_tables()
-        if tabs and tabs.tables:
-            for t in tabs.tables:
-                table_rects.append(pymupdf.Rect(t.bbox))
-                table_markdowns.append(t.to_markdown())
-    except Exception:
-        table_markdowns = []
-        table_rects = []
+    if extract_tables:
+        try:
+            tabs = page.find_tables()
+            if tabs and tabs.tables:
+                for t in tabs.tables:
+                    table_rects.append(pymupdf.Rect(t.bbox))
+                    table_markdowns.append(t.to_markdown())
+        except Exception:
+            table_markdowns = []
+            table_rects = []
 
-    # Fallback pass for borderless tables if no vector tables detected
-    if not table_markdowns:
-        fb_mds, fb_rects = _detect_fallback_borderless_tables(page)
-        if fb_mds:
-            table_markdowns.extend(fb_mds)
-            table_rects.extend(fb_rects)
+        # Fallback pass for borderless tables if no vector tables detected
+        if not table_markdowns:
+            fb_mds, fb_rects = _detect_fallback_borderless_tables(page)
+            if fb_mds:
+                table_markdowns.extend(fb_mds)
+                table_rects.extend(fb_rects)
 
     blocks = page.get_text("blocks", sort=True)
     text_blocks = []
@@ -302,7 +308,7 @@ def _extract_section_title(page: pymupdf.Page) -> str:
         return ""
 
 
-def load_pdf(filepath: str, dpi: int = 300) -> List[Dict[str, Any]]:
+def load_pdf(filepath: str, dpi: int = 300, extract_tables: bool = True) -> List[Dict[str, Any]]:
     """Loads a PDF document using PyMuPDF and extracts text, Markdown tables & section titles per page.
     Preserves multi-column reading order, excludes table bbox text from normal text, and applies 300 DPI OCR fallback.
 
@@ -330,7 +336,9 @@ def load_pdf(filepath: str, dpi: int = 300) -> List[Dict[str, Any]]:
     try:
         for page_num in range(len(doc)):
             page = doc.load_page(page_num)
-            text, tables = _extract_text_and_tables_from_page(page, dpi=dpi)
+            text, tables = _extract_text_and_tables_from_page(
+                page, dpi=dpi, extract_tables=extract_tables
+            )
             section_title = _extract_section_title(page)
 
             if text or tables:

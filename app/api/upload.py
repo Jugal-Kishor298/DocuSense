@@ -10,6 +10,7 @@ import gc
 import os
 import shutil
 import tempfile
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -63,8 +64,10 @@ async def upload_and_index_document(
                     )
                 f_out.write(chunk)
 
-        # 1. Ingest PDF & extract pages
-        pages = load_pdf(str(temp_path))
+        # 1. Ingest PDF & extract pages (skip heavy geometric table detection on 0.1 vCPU)
+        t0 = time.perf_counter()
+        pages = load_pdf(str(temp_path), extract_tables=False)
+        t_ingest = time.perf_counter() - t0
         if not pages:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -74,7 +77,9 @@ async def upload_and_index_document(
         page_count = len(pages)
 
         # 2. Section-aware text chunking
+        t1 = time.perf_counter()
         chunks = chunk_document(pages)
+        t_chunk = time.perf_counter() - t1
         if not chunks:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -86,15 +91,24 @@ async def upload_and_index_document(
         gc.collect()
 
         # 3. Dense vector embeddings (Cloudflare Workers AI 384D GPU)
+        t2 = time.perf_counter()
         chunk_texts = [c["text"] for c in chunks]
         embeddings = generate_embeddings(chunk_texts)
+        t_embed = time.perf_counter() - t2
 
         # 4. Batched upsert to Qdrant Cloud with session isolation
+        t3 = time.perf_counter()
         upserted_count = upsert_chunks_to_qdrant(
             chunks=chunks,
             embeddings=embeddings,
             session_id=clean_session_id,
             batch_size=100,
+        )
+        t_upsert = time.perf_counter() - t3
+
+        print(
+            f"[Upload Timings] {file.filename} ({page_count}p, {upserted_count} chunks): "
+            f"ingest={t_ingest:.2f}s | chunk={t_chunk:.2f}s | embed={t_embed:.2f}s | upsert={t_upsert:.2f}s"
         )
 
         # 5. Free all chunk and vector lists and force GC
