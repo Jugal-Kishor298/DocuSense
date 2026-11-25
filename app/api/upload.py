@@ -94,7 +94,7 @@ async def upload_and_index_document(
             chunks=chunks,
             embeddings=embeddings,
             session_id=clean_session_id,
-            batch_size=16,
+            batch_size=100,
         )
 
         # 5. Free all chunk and vector lists and force GC

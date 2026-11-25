@@ -124,7 +124,25 @@ def split_text_structurally(
                 continue
         filtered_units.append(u)
 
-    # 3. Sub-split any oversized structural unit using RecursiveCharacterTextSplitter
+    # 3. Pack tiny consecutive units up to chunk_size so multi-block PDFs
+    # (e.g. academic papers) don't shatter into hundreds of 100-char fragments,
+    # while still respecting structural boundaries once a chunk is substantial (>= 300 chars).
+    packed_units: List[str] = []
+    buffer = ""
+    min_meaningful_len = min(300, chunk_size // 3)
+
+    for u in filtered_units:
+        if not buffer:
+            buffer = u
+        elif len(buffer) < min_meaningful_len and (len(buffer) + 2 + len(u)) <= chunk_size:
+            buffer = f"{buffer}\n\n{u}"
+        else:
+            packed_units.append(buffer)
+            buffer = u
+    if buffer:
+        packed_units.append(buffer)
+
+    # 4. Sub-split any oversized structural unit using RecursiveCharacterTextSplitter
     chunks = []
     sub_splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
@@ -132,7 +150,7 @@ def split_text_structurally(
         separators=["\n\n", "\n", ". ", " ", ""]
     )
 
-    for u in filtered_units:
+    for u in packed_units:
         if len(u) > chunk_size:
             sub_chunks = sub_splitter.split_text(u)
             chunks.extend(sub_chunks)
