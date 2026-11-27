@@ -1,0 +1,45 @@
+name: Keep Qdrant Alive
+
+on:
+  schedule:
+    # Runs every 4 days at 00:00 UTC (safely within Qdrant's 7-day suspension window)
+    - cron: '0 0 */4 * *'
+  # Allows manual trigger from the GitHub Actions tab for immediate verification
+  workflow_dispatch:
+
+concurrency:
+  group: qdrant-keepalive
+  cancel-in-progress: true
+
+jobs:
+  ping-qdrant:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Ping Qdrant Cloud Collection & Point Count
+        env:
+          QDRANT_URL: ${{ secrets.QDRANT_URL }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+          QDRANT_COLLECTION: ${{ secrets.QDRANT_COLLECTION }}
+        run: |
+          if [ -z "$QDRANT_URL" ] || [ -z "$QDRANT_API_KEY" ]; then
+            echo "❌ Missing QDRANT_URL or QDRANT_API_KEY in GitHub Repository Secrets."
+            exit 1
+          fi
+
+          BASE_URL="${QDRANT_URL%/}"
+          COLLECTION="${QDRANT_COLLECTION:-docusense_docs}"
+
+          echo "1/2 Checking collection metadata: $COLLECTION"
+          curl -sS --fail-with-body -X GET "$BASE_URL/collections/$COLLECTION" \
+            -H "api-key: $QDRANT_API_KEY"
+          echo ""
+
+          echo "2/2 Exercising point count index (read-only)..."
+          curl -sS --fail-with-body -X POST "$BASE_URL/collections/$COLLECTION/points/count" \
+            -H "api-key: $QDRANT_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"exact": false}'
+          echo ""
+          echo "✅ Qdrant Cloud heartbeat succeeded."
